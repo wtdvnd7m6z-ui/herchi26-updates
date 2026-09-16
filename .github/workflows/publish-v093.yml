@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected=8
+          expected=5
           count=$(find payload -maxdepth 1 -type f -name 'part-*' 2>/dev/null | wc -l | tr -d ' ')
           echo "count=$count"
           if [ "$count" -ne "$expected" ]; then
