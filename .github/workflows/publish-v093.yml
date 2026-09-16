@@ -1,0 +1,67 @@
+name: Publish HERCHI26 Chief v0.9.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'payload/**'
+      - '.github/workflows/publish-v093.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait until all payload chunks exist
+        id: ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=8
+          count=$(find payload -maxdepth 1 -type f -name 'part-*' 2>/dev/null | wc -l | tr -d ' ')
+          echo "count=$count"
+          if [ "$count" -ne "$expected" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild final ZIP and manifest
+        if: steps.ready.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat payload/part-* | base64 -d > HERCHI26_CHIEF_RUNTIME_UPDATE.zip
+          echo '17b8bd6e835d972bc26b19c908af82c82b3ecb4f380130addf47690b21fd8723  HERCHI26_CHIEF_RUNTIME_UPDATE.zip' | sha256sum -c -
+          unzip -t HERCHI26_CHIEF_RUNTIME_UPDATE.zip >/dev/null
+          cat > manifest.json <<'JSON'
+          {
+            "product": "HERCHI26 Chief",
+            "version": "0.9.3",
+            "versionDate": "2026-09-16",
+            "buildId": "H26-CORE-008",
+            "channel": "BUILD",
+            "sha256": "17b8bd6e835d972bc26b19c908af82c82b3ecb4f380130addf47690b21fd8723",
+            "packageUrl": "HERCHI26_CHIEF_RUNTIME_UPDATE.zip",
+            "notes": "Erster echter In-App-Update-Test von v0.9.2 auf v0.9.3."
+          }
+          JSON
+
+      - name: Publish final files and remove transport chunks
+        if: steps.ready.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'HERCHI26 Update Publisher'
+          git config user.email 'actions@users.noreply.github.com'
+          rm -rf payload
+          rm -f .github/workflows/publish-v093.yml
+          git add -A HERCHI26_CHIEF_RUNTIME_UPDATE.zip manifest.json payload .github/workflows/publish-v093.yml
+          git commit -m 'publish: HERCHI26 Chief v0.9.3 update channel'
+          git push origin HEAD:main
